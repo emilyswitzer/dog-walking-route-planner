@@ -1,0 +1,43 @@
+import unittest
+from app import app, generate_circular_route
+import json
+
+class DogWalkingAppTests(unittest.TestCase):
+
+    def setUp(self):
+        self.app = app.test_client()
+        self.app.testing = True
+
+    def test_generate_circular_route_function(self):
+        lat = 37.7749
+        lon = -122.4194
+        distance = 3  # km
+        route = generate_circular_route(lat, lon, distance)
+        self.assertIsNotNone(route)
+        self.assertIsInstance(route, list)
+        self.assertGreater(len(route), 0)
+        self.assertIsInstance(route[0], tuple)
+        self.assertEqual(len(route[0]), 2)
+
+    def test_generate_route_endpoint_success(self):
+        data = {
+            "lat": 37.7749,
+            "lon": -122.4194,
+            "distance": 3
+        }
+        response = self.app.post('/generate-route', data=json.dumps(data),
+                                 content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.data)
+        self.assertIn('route', response_data)
+        self.assertIsInstance(response_data['route'], list)
+
+    def test_generate_route_endpoint_missing_params(self):
+        response = self.app.post('/generate-route', data=json.dumps({}),
+                                 content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        response_data = json.loads(response.data)
+        self.assertIn('error', response_data)
+
+if __name__ == '__main__':
+    unittest.main()

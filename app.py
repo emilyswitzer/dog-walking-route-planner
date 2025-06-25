@@ -1,12 +1,14 @@
 import os
 from dotenv import load_dotenv
 import requests
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, jsonify
 from typing import List, Optional, Tuple
+import polyline
 
 load_dotenv()  # Loads the .env file
 
 API_KEY = os.getenv('OPENWEATHER_API_KEY')
+ORS_API_KEY = os.getenv("ORS_API_KEY")
 
 app = Flask(__name__)
 
@@ -70,24 +72,54 @@ def get_dog_friendly_shops(lat: float, lon: float, radius: int = 2000) -> List[s
                 places.append(name)
     return places
 
-@app.route('/', methods=['GET', 'POST'])
-def home():
-    routes = None
-    weather = None
-    if request.method == 'POST':
-        location = request.form['location']
-        distance = float(request.form['distance'])
-        weather = get_weather(location)
-        coordinates = get_coordinates(location)
-        dog_shops = []
-        if coordinates:
-            dog_shops = get_dog_friendly_shops(*coordinates)
-        routes = [
-            f"Scenic park in {location}, approx {distance} km",
-            f"Lake loop near {location}, approx {distance * 1.2:.1f} km",
-            f"Neighborhood trail in {location}, approx {distance * 0.8:.1f} km"
-        ]
-    return render_template('index.html', routes=routes, weather=weather, dog_shops=dog_shops)
+def generate_circular_route(lat, lon, distance_km):
+    target_distance = distance_km * 1000  
+    url = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson"
+
+    offset = distance_km * 0.009  
+    coords = [[lon, lat], [lon + offset, lat]]
+
+    body = {
+        "coordinates": coords,
+        "instructions": False,
+        "units": "m"
+    }
+
+    headers = {
+        "Authorization": ORS_API_KEY,
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(url, json=body, headers=headers)
+    if response.status_code != 200:
+        return None
+
+    data = response.json()
+    route_coords = data["features"][0]["geometry"]["coordinates"]
+    route_latlon = [(coord[1], coord[0]) for coord in route_coords]
+
+    return route_latlon
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/generate-route', methods=['POST'])
+def generate_route():
+    data = request.json
+    lat = data.get('lat')
+    lon = data.get('lon')
+    distance = data.get('distance')
+
+    if lat is None or lon is None or distance is None:
+        return jsonify({"error": "Missing parameters"}), 400
+
+    route = generate_circular_route(lat, lon, distance)
+    if route is None:
+        return jsonify({"error": "Failed to generate route"}), 500
+
+    return jsonify({"route": route})
 
 if __name__ == '__main__':
     app.run(debug=True)
