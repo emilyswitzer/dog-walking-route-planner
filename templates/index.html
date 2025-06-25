@@ -28,5 +28,16 @@
         <h2>Current Weather in {{ request.form['location'] }}:</h2>
         <p>{{ weather }}</p>
     {% endif %}
+
+    {% if dog_shops %}
+    <h2>Dog-Friendly Shops and Parks near {{ request.form['location'] }}:</h2>
+        <ul>
+        {% for shop in dog_shops %}
+            <li>{{ shop }}</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No dog-friendly shops found nearby.</p>
+    {% endif %}
 </body>
 </html>
