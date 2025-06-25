@@ -23,5 +23,10 @@
         {% endfor %}
         </ul>
     {% endif %}
+
+    {% if weather %}
+        <h2>Current Weather in {{ request.form['location'] }}:</h2>
+        <p>{{ weather }}</p>
+    {% endif %}
 </body>
 </html>
