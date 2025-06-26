@@ -3,27 +3,13 @@ from dotenv import load_dotenv
 import requests
 from flask import Flask, request, render_template, jsonify
 from typing import List, Optional, Tuple
-from flask import render_template
 import polyline
 
 load_dotenv()  # Loads the .env file
 
-API_KEY = os.getenv('OPENWEATHER_API_KEY')
 ORS_API_KEY = os.getenv("ORS_API_KEY")
 
 app = Flask(__name__)
-
-def get_weather(city):
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric"
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        temp = data['main']['temp']
-        description = data['weather'][0]['description']
-        return f"{temp}°C, {description}"
-    else:
-        return "Weather data not available"
-    
 
 def get_dog_friendly_spots(lat, lon, radius=1500):
     overpass_url = "http://overpass-api.de/api/interpreter"
@@ -156,6 +142,55 @@ def dog_spots():
 
     return jsonify({"spots": spots})
 
+@app.route('/weather', methods=['POST'])
+def get_weather():
+    data = request.get_json()
+    print("Received data:", data)  # 👈 Debug incoming request
 
+    lat = data.get('lat')
+    lon = data.get('lon')
+
+    if not lat or not lon:
+        print("Missing coordinates")  # 👈 Debug missing params
+        return jsonify({'error': 'Missing coordinates'}), 400
+
+    api_key = os.getenv("OPENWEATHER_API_KEY")
+    print("Using API key:", api_key)  # 👈 Confirm key loaded
+
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+    print("Weather API URL:", url)  # 👈 Debug request URL
+
+    try:
+        response = requests.get(url)
+        print("Response status:", response.status_code)
+        print("Response JSON:", response.text)  # 👈 See exact API reply
+        response.raise_for_status()
+        weather_data = response.json()
+
+        temp = weather_data['main']['temp']
+        condition = weather_data['weather'][0]['main']
+        description = weather_data['weather'][0]['description']
+        icon = weather_data['weather'][0]['icon']
+
+        # Walk recommendation logic
+        if 10 <= temp <= 25 and condition in ['Clear', 'Clouds']:
+            recommendation = 'Good'
+        elif 5 <= temp <= 30 and condition in ['Drizzle', 'Mist', 'Clouds', 'Rain']:
+            recommendation = 'Okay'
+        else:
+            recommendation = 'Skip'
+
+        return jsonify({
+            'temperature': temp,
+            'condition': condition,
+            'description': description,
+            'icon': icon,
+            'recommendation': recommendation
+        })
+
+    except requests.exceptions.RequestException as e:
+        print("Error occurred:", e)  # 👈 Log error
+        return jsonify({'error': 'Weather API request failed'}), 500
+    
 if __name__ == '__main__':
     app.run(debug=True)

@@ -7,17 +7,20 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     #map { height: 500px; margin-top: 10px; }
+    #weather { margin-top: 15px; font-family: Arial, sans-serif; }
   </style>
 </head>
 <body>
   <h1>Dog Walking Route Planner</h1>
 
-  <label for="distance">Distance (km): <span id="dist-value">3</span></label><br />
+  <label for="distance">
+    Distance (km): <span id="dist-value">3</span>
+  </label><br />
   <input type="range" id="distance" min="1" max="5" value="3" step="0.5" />
 
   <button id="generateBtn">Generate Route</button>
 
-  <div id="weather"></div>
+  <div id="weather">Weather info will appear here...</div>
 
   <div id="map"></div>
 

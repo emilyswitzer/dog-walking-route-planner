@@ -149,6 +149,30 @@ class DogWalkingAppTests(unittest.TestCase):
         data = json.loads(response.data)
         self.assertIn('error', data)
         
+        
+    @patch('app.requests.get')
+    def test_weather_endpoint_success(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'main': {'temp': 18.5},
+            'weather': [{'main': 'Clear', 'description': 'clear sky', 'icon': '01d'}]
+        }
+        mock_get.return_value = mock_response
+
+        payload = {
+            'lat': 37.7749,
+            'lon': -122.4194
+        }
+
+        response = self.app.post('/weather', json=payload)
+        data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('temperature', data)
+        self.assertIn('condition', data)
+        self.assertIn('recommendation', data)
+        self.assertEqual(data['recommendation'], 'Good')
 
 
 if __name__ == "__main__":

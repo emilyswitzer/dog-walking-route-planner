@@ -26,6 +26,30 @@ function clearLayers() {
   }
 }
 
+async function fetchWeather(lat, lon) {
+  try {
+    const res = await fetch('/weather', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lon })
+    });
+
+    if (!res.ok) throw new Error('Weather fetch failed');
+
+    const data = await res.json();
+
+    weatherDiv.innerHTML = `
+      <p><strong>${data.temperature}°C</strong> - ${data.description}</p>
+      <p>Condition: ${data.condition}</p>
+      <p>Walk Recommendation: <strong>${data.recommendation}</strong></p>
+      <img src="https://openweathermap.org/img/wn/${data.icon}@2x.png" alt="Weather Icon" />
+    `;
+  } catch (err) {
+    console.error(err);
+    weatherDiv.textContent = 'Could not fetch weather data.';
+  }
+}
+
 generateBtn.onclick = () => {
   if (!navigator.geolocation) {
     alert('Geolocation not supported');
@@ -39,37 +63,40 @@ generateBtn.onclick = () => {
 
     clearLayers();
 
-    // Call /generate-route endpoint
-    const routeResp = await fetch('/generate-route', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({lat, lon, distance})
-    });
-    const routeData = await routeResp.json();
+    try {
+      // Generate Route
+      const routeResp = await fetch('/generate-route', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ lat, lon, distance })
+      });
+      const routeData = await routeResp.json();
+      const latlngs = routeData.route.map(coord => [coord[0], coord[1]]);
+      routeLayer = L.polyline(latlngs, { color: 'blue' }).addTo(map);
+      map.fitBounds(routeLayer.getBounds());
 
-    // Draw route polyline
-    const latlngs = routeData.route.map(coord => [coord[0], coord[1]]);
-    routeLayer = L.polyline(latlngs, {color: 'blue'}).addTo(map);
-    map.fitBounds(routeLayer.getBounds());
+      // Dog Spots
+      const spotsResp = await fetch('/dog-spots', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ lat, lon })
+      });
+      const spotsData = await spotsResp.json();
 
-    // Call /dog-spots endpoint
-    const spotsResp = await fetch('/dog-spots', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({lat, lon})
-    });
-    const spotsData = await spotsResp.json();
+      spotsLayer = L.layerGroup();
+      spotsData.spots.forEach(spot => {
+        const marker = L.marker([spot.lat, spot.lon])
+          .bindPopup(`${spot.name} (${spot.type})`);
+        spotsLayer.addLayer(marker);
+      });
+      spotsLayer.addTo(map);
 
-    spotsLayer = L.layerGroup();
-    spotsData.spots.forEach(spot => {
-      const marker = L.marker([spot.lat, spot.lon])
-        .bindPopup(`${spot.name} (${spot.type})`);
-      spotsLayer.addLayer(marker);
-    });
-    spotsLayer.addTo(map);
-
-    // Optionally display simple weather info (later)
-    weatherDiv.textContent = 'Weather info coming soon...';
+      // Weather
+      await fetchWeather(lat, lon);
+    } catch (err) {
+      console.error('Error during generation:', err);
+      weatherDiv.textContent = 'An error occurred while generating data.';
+    }
   }, () => {
     alert('Could not get your location');
   });
