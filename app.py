@@ -23,54 +23,39 @@ def get_weather(city):
     else:
         return "Weather data not available"
     
-def get_coordinates(city: str) -> Optional[Tuple[float, float]]:
-    """
-    Get latitude and longitude for a city name using Nominatim API.
 
-
-    """
-    url = "https://nominatim.openstreetmap.org/search"
-    params = {
-        "q": city,
-        "format": "json",
-        "limit": 1
-    }
-    headers = {
-        "User-Agent": "dog-walking-route-planner/1.0"
-    }
-    response = requests.get(url, params=params, headers=headers)
-
-    if response.status_code == 200 and response.json():
-        data = response.json()[0]
-        return float(data["lat"]), float(data["lon"])
-    else:
-        return None
-
-
-def get_dog_friendly_shops(lat: float, lon: float, radius: int = 2000) -> List[str]:
-    """
-    Query Overpass API to find dog-friendly shops within radius.
-
-    """
+def get_dog_friendly_spots(lat, lon, radius=1500):
     overpass_url = "http://overpass-api.de/api/interpreter"
+
     query = f"""
     [out:json];
     (
-      node["shop"="pet"](around:{radius},{lat},{lon});
-      node["shop"="dog"](around:{radius},{lat},{lon});
       node["leisure"="dog_park"](around:{radius},{lat},{lon});
+      node["shop"="pet"](around:{radius},{lat},{lon});
+      node["amenity"="drinking_water"](around:{radius},{lat},{lon});
+      node["amenity"="waste_basket"](around:{radius},{lat},{lon});
     );
-    out center;
+    out body;
     """
-    response = requests.get(overpass_url, params={'data': query})
-    places = []
-    if response.status_code == 200:
-        data = response.json()
-        for element in data.get('elements', []):
-            name = element.get('tags', {}).get('name')
-            if name:
-                places.append(name)
-    return places
+
+    response = requests.post(overpass_url, data={"data": query})
+    if response.status_code != 200:
+        return []
+
+    data = response.json()
+    spots = []
+    for element in data.get("elements", []):
+        spot = {
+            "lat": element["lat"],
+            "lon": element["lon"],
+            "type": element["tags"].get("leisure") or
+                    element["tags"].get("shop") or
+                    element["tags"].get("amenity"),
+            "name": element["tags"].get("name", "Unnamed")
+        }
+        spots.append(spot)
+
+    return spots
 
 def generate_circular_route(lat, lon, distance_km):
     target_distance = distance_km * 1000  
@@ -120,6 +105,19 @@ def generate_route():
         return jsonify({"error": "Failed to generate route"}), 500
 
     return jsonify({"route": route})
+
+@app.route('/dog-spots', methods=['POST'])
+def dog_spots():
+    data = request.json
+    lat = data.get("lat")
+    lon = data.get("lon")
+
+    if lat is None or lon is None:
+        return jsonify({"error": "Missing lat/lon"}), 400
+
+    spots = get_dog_friendly_spots(lat, lon)
+    return jsonify({"spots": spots})
+
 
 if __name__ == '__main__':
     app.run(debug=True)
