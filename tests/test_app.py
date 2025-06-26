@@ -104,6 +104,51 @@ class DogWalkingAppTests(unittest.TestCase):
         self.assertEqual(len(response_data["spots"]), 2)
         self.assertEqual(response_data["spots"][0]["type"], "drinking_water")
         
+    @patch('app.requests.post')
+    def test_dog_spots_endpoint_success(self, mock_post):
+        # Sample fake response data from Overpass API
+        fake_response = {
+            "elements": [
+                {
+                    "id": 1,
+                    "lat": 37.77,
+                    "lon": -122.42,
+                    "tags": {
+                        "leisure": "dog_park",
+                        "name": "Happy Dog Park"
+                    }
+                },
+                {
+                    "id": 2,
+                    "lat": 37.78,
+                    "lon": -122.43,
+                    "tags": {
+                        "shop": "pet",
+                        "name": "Pet Store"
+                    }
+                }
+            ]
+        }
+
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = fake_response
+
+        payload = {"lat": 37.7749, "lon": -122.4194}
+        response = self.app.post('/dog-spots', data=json.dumps(payload), content_type='application/json')
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertIn('spots', data)
+        self.assertEqual(len(data['spots']), 2)
+        self.assertEqual(data['spots'][0]['name'], "Happy Dog Park")
+        self.assertEqual(data['spots'][1]['type'], "pet")
+
+    def test_dog_spots_missing_params(self):
+        response = self.app.post('/dog-spots', data=json.dumps({}), content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn('error', data)
+        
 
 
 if __name__ == "__main__":

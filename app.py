@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import requests
 from flask import Flask, request, render_template, jsonify
 from typing import List, Optional, Tuple
+from flask import render_template
 import polyline
 
 load_dotenv()  # Loads the .env file
@@ -108,14 +109,51 @@ def generate_route():
 
 @app.route('/dog-spots', methods=['POST'])
 def dog_spots():
-    data = request.json
-    lat = data.get("lat")
-    lon = data.get("lon")
+    data = request.get_json()
+    lat = data.get('lat')
+    lon = data.get('lon')
 
     if lat is None or lon is None:
-        return jsonify({"error": "Missing lat/lon"}), 400
+        return jsonify({"error": "Missing latitude or longitude"}), 400
 
-    spots = get_dog_friendly_spots(lat, lon)
+    # Overpass QL query to get dog-friendly places within 2km radius
+    overpass_url = "http://overpass-api.de/api/interpreter"
+    query = f"""
+    [out:json];
+    (
+      node["leisure"="dog_park"](around:2000,{lat},{lon});
+      node["shop"="pet"](around:2000,{lat},{lon});
+      node["amenity"="drinking_water"](around:2000,{lat},{lon});
+      node["waste"="dog_waste_bin"](around:2000,{lat},{lon});
+    );
+    out body;
+    """
+
+    try:
+        response = requests.post(overpass_url, data=query)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        return jsonify({"error": "Failed to fetch dog-friendly spots", "details": str(e)}), 500
+
+    data = response.json()
+    spots = []
+    for element in data.get('elements', []):
+        tags = element.get('tags', {})
+        spot_type = (
+            tags.get('leisure') or
+            tags.get('shop') or
+            tags.get('amenity') or
+            tags.get('waste') or
+            "unknown"
+        )
+        spots.append({
+            "id": element.get('id'),
+            "lat": element.get('lat'),
+            "lon": element.get('lon'),
+            "type": spot_type,
+            "name": tags.get('name', 'Unnamed')
+        })
+
     return jsonify({"spots": spots})
 
 
