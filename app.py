@@ -182,7 +182,7 @@ def dog_spots():
     try:
         response = requests.post(overpass_url, data=query)
         response.raise_for_status()
-    except requests.RequestException as e:
+    except Exception as e:
         return jsonify({"error": "Failed to fetch dog-friendly spots", "details": str(e)}), 500
 
     data = response.json()
@@ -243,7 +243,7 @@ def get_weather():
             'recommendation': recommendation
         })
 
-    except requests.RequestException:
+    except Exception:
         return jsonify({'error': 'Weather API request failed'}), 500
 
 if __name__ == '__main__':

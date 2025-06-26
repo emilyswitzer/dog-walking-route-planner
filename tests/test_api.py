@@ -92,3 +92,47 @@ def test_weather_missing_params(client):
     assert response.status_code == 400
     data = response.get_json()
     assert 'error' in data
+    
+@patch('app.requests.post')
+def test_generate_route_failure_route_none(mock_post, client):
+    # Mock the OpenRouteService route response to simulate failure
+    mock_post.return_value = MagicMock(status_code=500)
+    
+    response = client.post('/generate-route', json={
+        'lat': 37.7749,
+        'lon': -122.4194,
+        'distance': 3
+    })
+
+    assert response.status_code == 500
+    data = response.get_json()
+    assert 'error' in data
+
+@patch('app.requests.post')
+def test_dog_spots_api_failure(mock_post, client):
+    # Simulate failure in Overpass API call
+    mock_post.side_effect = Exception("API failure")
+
+    response = client.post('/dog-spots', json={
+        'lat': 37.7749,
+        'lon': -122.4194
+    })
+
+    assert response.status_code == 500
+    data = response.get_json()
+    assert 'error' in data
+
+@patch('app.requests.get')
+def test_weather_api_failure(mock_get, client):
+    # Simulate failure in OpenWeather API call
+    mock_get.side_effect = Exception("API failure")
+
+    response = client.post('/weather', json={
+        'lat': 37.7749,
+        'lon': -122.4194
+    })
+
+    assert response.status_code == 500
+    data = response.get_json()
+    assert 'error' in data
+
