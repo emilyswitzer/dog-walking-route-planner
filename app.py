@@ -4,6 +4,7 @@ from flask import Flask, request, render_template, jsonify
 from flask_migrate import Migrate
 from config import Config
 import requests
+import traceback
 import polyline
 import json 
 
@@ -89,65 +90,71 @@ def index():
 
 @app.route('/generate-route', methods=['POST'])
 def generate_route():
-    data = request.json
-    lat = data.get('lat')
-    lon = data.get('lon')
-    distance = data.get('distance')
-
-    if lat is None or lon is None or distance is None:
-        return jsonify({"error": "Missing parameters"}), 400
-
-    # 1. Generate the route
-    route = generate_circular_route(lat, lon, distance)
-    if route is None:
-        return jsonify({"error": "Failed to generate route"}), 500
-
-    # 2. Fetch weather info
-    api_key = os.getenv("OPENWEATHER_API_KEY")
-    weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
     try:
-        weather_resp = requests.get(weather_url)
-        weather_resp.raise_for_status()
-        weather_json = weather_resp.json()
+        data = request.json
+        lat = data.get('lat')
+        lon = data.get('lon')
+        distance = data.get('distance')
 
-        temperature = weather_json['main']['temp']
-        condition = weather_json['weather'][0]['main']
-        description = weather_json['weather'][0]['description']
-    except Exception as e:
-        temperature = None
-        condition = None
-        description = None
+        if lat is None or lon is None or distance is None:
+            return jsonify({"error": "Missing parameters"}), 400
 
-    # 3. Fetch dog-friendly spots
-    spots = get_dog_friendly_spots(lat, lon)
-    dog_parks = [s['name'] for s in spots if s['type'] == 'dog_park']
+        # 1. Generate the route
+        route = generate_circular_route(lat, lon, distance)
+        if route is None:
+            return jsonify({"error": "Failed to generate route"}), 500
 
-    # 4. Estimate difficulty (placeholder logic)
-    difficulty = 'easy' if distance <= 2 else 'medium' if distance <= 4 else 'hard'
+        # 2. Fetch weather info
+        api_key = os.getenv("OPENWEATHER_API_KEY")
+        weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        try:
+            weather_resp = requests.get(weather_url)
+            weather_resp.raise_for_status()
+            weather_json = weather_resp.json()
 
-    # 5. Save walk to DB
-    walk = Walk(
-        lat=lat,
-        lon=lon,
-        distance=distance,
-        temperature=temperature,
-        condition=condition,
-        dog_parks_visited=json.dumps(dog_parks),
-        difficulty=difficulty
-    )
-    db.session.add(walk)
-    db.session.commit()
+            temperature = weather_json['main']['temp']
+            condition = weather_json['weather'][0]['main']
+            description = weather_json['weather'][0]['description']
+        except Exception as e:
+            print("Weather API error:", e)
+            temperature = None
+            condition = None
+            description = None
 
-    return jsonify({
-        "route": route,
-        "weather": {
-            "temperature": temperature,
-            "condition": condition,
-            "description": description
-        },
-        "dog_parks": dog_parks,
-        "difficulty": difficulty
-    })
+        # 3. Fetch dog-friendly spots
+        spots = get_dog_friendly_spots(lat, lon)
+        dog_parks = [s['name'] for s in spots if s['type'] == 'dog_park']
+
+        # 4. Estimate difficulty (placeholder logic)
+        difficulty = 'easy' if distance <= 2 else 'medium' if distance <= 4 else 'hard'
+
+        # 5. Save walk to DB
+        walk = Walk(
+            lat=lat,
+            lon=lon,
+            distance=distance,
+            temperature=temperature,
+            condition=condition,
+            dog_parks_visited=json.dumps(dog_parks),
+            difficulty=difficulty
+        )
+        db.session.add(walk)
+        db.session.commit()
+
+        return jsonify({
+            "route": route,
+            "weather": {
+                "temperature": temperature,
+                "condition": condition,
+                "description": description
+            },
+            "dog_parks": dog_parks,
+            "difficulty": difficulty
+        })
+    except Exception:
+        print("Exception in /generate-route:")
+        traceback.print_exc()
+        return jsonify({"error": "Internal Server Error"}), 500
 
 
 @app.route('/dog-spots', methods=['POST'])
