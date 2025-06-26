@@ -116,7 +116,7 @@ def generate_route():
             condition = weather_json['weather'][0]['main']
             description = weather_json['weather'][0]['description']
         except Exception as e:
-            print("Weather API error:", e)
+            print("Weather API fetch error:", e)
             temperature = None
             condition = None
             description = None
@@ -151,10 +151,11 @@ def generate_route():
             "dog_parks": dog_parks,
             "difficulty": difficulty
         })
-    except Exception:
+
+    except Exception as e:
         print("Exception in /generate-route:")
         traceback.print_exc()
-        return jsonify({"error": "Internal Server Error"}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/dog-spots', methods=['POST'])
