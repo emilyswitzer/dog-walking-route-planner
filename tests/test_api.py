@@ -1,6 +1,6 @@
 import pytest
 from app import app
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 
 @pytest.fixture
 def client():
@@ -8,15 +8,36 @@ def client():
     with app.test_client() as client:
         yield client
 
-def test_generate_route_success(client):
+@patch('app.requests.get')
+@patch('app.requests.post')
+def test_generate_route_success(mock_post, mock_get, client):
+    # Mock the OpenRouteService route response
+    mock_post.return_value = MagicMock(status_code=200)
+    mock_post.return_value.json.return_value = {
+        "features": [{
+            "geometry": {
+                "coordinates": [[-122.4194, 37.7749], [-122.418, 37.775]]
+            }
+        }]
+    }
+
+    # Mock the OpenWeather response
+    mock_get.return_value = MagicMock(status_code=200)
+    mock_get.return_value.json.return_value = {
+        "main": {"temp": 20},
+        "weather": [{"main": "Clear", "description": "clear sky"}]
+    }
+
     response = client.post('/generate-route', json={
         'lat': 37.7749,
         'lon': -122.4194,
         'distance': 3
     })
-    print("Response status:", response.status_code)
-    print("Response data:", response.get_data(as_text=True))
+
     assert response.status_code == 200
+    data = response.get_json()
+    assert "route" in data
+    assert "weather" in data
 
 def test_generate_route_missing_params(client):
     response = client.post('/generate-route', json={
