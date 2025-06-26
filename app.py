@@ -245,6 +245,30 @@ def get_weather():
 
     except Exception:
         return jsonify({'error': 'Weather API request failed'}), 500
+    
+@app.route('/walk-history', methods=['GET'])
+def walk_history():
+    walks = Walk.query.order_by(Walk.timestamp.desc()).all()
+    history = []
+    for walk in walks:
+        history.append({
+            "id": walk.id,
+            "lat": walk.lat,
+            "lon": walk.lon,
+            "distance": walk.distance,
+            "timestamp": walk.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "temperature": walk.temperature,
+            "condition": walk.condition,
+            "dog_parks_visited": json.loads(walk.dog_parks_visited or "[]"),
+            "difficulty": walk.difficulty
+        })
+    return jsonify(history)
+
+
+@app.route('/walks')
+def view_walks():
+    walks = Walk.query.order_by(Walk.timestamp.desc()).all()
+    return render_template('walks.html', walks=walks)
 
 if __name__ == '__main__':
     app.run(debug=True)

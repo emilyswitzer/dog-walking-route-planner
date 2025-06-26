@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Walk History</title>
+</head>
+<body>
+    <h1>Walk History</h1>
+    {% if walks %}
+        <ul>
+        {% for walk in walks %}
+            <li>
+                <strong>{{ walk.timestamp.strftime('%Y-%m-%d %H:%M') }}</strong> —
+                Distance: {{ walk.distance }} km —
+                Temp: {{ walk.temperature or 'N/A' }}°C —
+                Weather: {{ walk.condition or 'N/A' }} —
+                Difficulty: {{ walk.difficulty }}
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No walks recorded yet.</p>
+    {% endif %}
+</body>
+</html>
