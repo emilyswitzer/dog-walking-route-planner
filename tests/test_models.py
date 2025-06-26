@@ -81,3 +81,23 @@ def test_walk_validation(test_app):
         with pytest.raises(Exception):
             db.session.commit()
         db.session.rollback()
+        
+def test_walk_model_duration(test_app):
+    with app.app_context():
+        walk = Walk(
+            lat=37.7749,
+            lon=-122.4194,
+            distance=3.5,
+            duration=3600,  # 1 hour in seconds
+            timestamp=datetime.utcnow(),
+            temperature=20.0,
+            condition='Clear',
+            dog_parks_visited='[]',
+            difficulty='medium'
+        )
+        db.session.add(walk)
+        db.session.commit()
+
+        saved_walk = Walk.query.first()
+        assert saved_walk.duration == 3600
+        assert saved_walk.distance == 3.5

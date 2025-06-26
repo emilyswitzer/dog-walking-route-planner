@@ -7,6 +7,7 @@ import requests
 import traceback
 import polyline
 import json 
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -99,12 +100,10 @@ def generate_route():
         if lat is None or lon is None or distance is None:
             return jsonify({"error": "Missing parameters"}), 400
 
-        # 1. Generate the route
         route = generate_circular_route(lat, lon, distance)
         if route is None:
             return jsonify({"error": "Failed to generate route"}), 500
 
-        # 2. Fetch weather info
         api_key = os.getenv("OPENWEATHER_API_KEY")
         weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
         try:
@@ -121,23 +120,24 @@ def generate_route():
             condition = None
             description = None
 
-        # 3. Fetch dog-friendly spots
         spots = get_dog_friendly_spots(lat, lon)
         dog_parks = [s['name'] for s in spots if s['type'] == 'dog_park']
 
-        # 4. Estimate difficulty (placeholder logic)
         difficulty = 'easy' if distance <= 2 else 'medium' if distance <= 4 else 'hard'
 
-        # 5. Save walk to DB
+        duration = data.get('duration')  # in minutes
+
         walk = Walk(
             lat=lat,
             lon=lon,
             distance=distance,
+            duration=duration,
             temperature=temperature,
             condition=condition,
             dog_parks_visited=json.dumps(dog_parks),
             difficulty=difficulty
         )
+
         db.session.add(walk)
         db.session.commit()
 
@@ -149,7 +149,8 @@ def generate_route():
                 "description": description
             },
             "dog_parks": dog_parks,
-            "difficulty": difficulty
+            "difficulty": difficulty,
+            "duration": duration
         })
 
     except Exception as e:
@@ -265,10 +266,63 @@ def walk_history():
     return jsonify(history)
 
 
+@app.route('/api/walks', methods=['GET'])
+def api_walks():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    # Filters from query params
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    min_distance = request.args.get('min_distance', type=float)
+    max_distance = request.args.get('max_distance', type=float)
+
+    query = Walk.query
+
+    if start_date_str:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+        query = query.filter(Walk.timestamp >= start_date)
+    if end_date_str:
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d") + timedelta(days=1)
+        query = query.filter(Walk.timestamp < end_date)
+
+
+    if min_distance is not None:
+        query = query.filter(Walk.distance >= min_distance)
+    if max_distance is not None:
+        query = query.filter(Walk.distance <= max_distance)
+
+    # Order by timestamp desc and paginate
+    walks_pagination = query.order_by(Walk.timestamp.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
+    walks = [{
+        'id': w.id,
+        'lat': w.lat,
+        'lon': w.lon,
+        'distance': w.distance,
+        'timestamp': w.timestamp.isoformat(),
+        'temperature': w.temperature,
+        'condition': w.condition,
+        'dog_parks_visited': w.dog_parks_visited,
+        'difficulty': w.difficulty,
+        'duration': w.duration
+    } for w in walks_pagination.items]
+
+    return jsonify({
+        "page": page,
+        "pages": walks_pagination.pages,
+        "total": walks_pagination.total,
+        "walks": walks
+    })
+    
 @app.route('/walks')
-def view_walks():
-    walks = Walk.query.order_by(Walk.timestamp.desc()).all()
-    return render_template('walks.html', walks=walks)
+def walks_page():
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    walks_pagination = Walk.query.order_by(Walk.timestamp.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    walks = walks_pagination.items
+
+    return render_template('walks.html', walks=walks, pagination=walks_pagination)
 
 if __name__ == '__main__':
     app.run(debug=True)

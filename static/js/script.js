@@ -1,5 +1,6 @@
 const distSlider = document.getElementById('distance');
 const distValue = document.getElementById('dist-value');
+const durationInput = document.getElementById('duration');  // new duration input element
 const generateBtn = document.getElementById('generateBtn');
 const weatherDiv = document.getElementById('weather');
 
@@ -60,17 +61,19 @@ generateBtn.onclick = () => {
     const lat = position.coords.latitude;
     const lon = position.coords.longitude;
     const distance = parseFloat(distSlider.value);
+    const duration = parseFloat(durationInput.value) || null;  // read duration or null
 
     clearLayers();
 
     try {
-      // Generate Route
+      // Generate Route - include duration
       const routeResp = await fetch('/generate-route', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ lat, lon, distance })
+        body: JSON.stringify({ lat, lon, distance, duration })
       });
       const routeData = await routeResp.json();
+
       const latlngs = routeData.route.map(coord => [coord[0], coord[1]]);
       routeLayer = L.polyline(latlngs, { color: 'blue' }).addTo(map);
       map.fitBounds(routeLayer.getBounds());
