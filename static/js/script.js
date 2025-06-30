@@ -107,8 +107,16 @@ async function saveWalk(data) {
 }
 
 generateBtn.onclick = () => {
+  clearError();
   if (!navigator.geolocation) {
     alert('Geolocation not supported');
+    return;
+  }
+
+  // Validate distance slider value
+  const distance = parseFloat(distSlider.value);
+  if (isNaN(distance) || distance < 0.5 || distance > 10) {
+    showError('Please select a distance between 0.5 and 10 km.');
     return;
   }
 
@@ -117,8 +125,7 @@ generateBtn.onclick = () => {
   navigator.geolocation.getCurrentPosition(async position => {
     const lat = position.coords.latitude;
     const lon = position.coords.longitude;
-    const distance = parseFloat(distSlider.value);
-    const duration = 0; // Or get duration from user input if you add that field
+    const duration = 0; 
 
     clearLayers();
 
@@ -129,6 +136,14 @@ generateBtn.onclick = () => {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ lat, lon, distance, duration })
       });
+
+      if (!routeResp.ok) {
+        const errorData = await routeResp.json();
+        showError(errorData.error || 'Failed to generate route.');
+        generateBtn.disabled = false;
+        return;
+      }
+
       const routeData = await routeResp.json();
 
       const latlngs = routeData.route.map(coord => [coord[0], coord[1]]);
@@ -173,6 +188,7 @@ generateBtn.onclick = () => {
       console.error('Error during generation:', err);
       showError('An error occurred while generating data.');
       weatherDiv.textContent = 'An error occurred while generating data.';
+      generateBtn.disabled = false;
     }
   }, () => {
     alert('Could not get your location');

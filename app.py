@@ -96,10 +96,28 @@ def generate_route():
         lat = data.get('lat')
         lon = data.get('lon')
         distance = data.get('distance')
+        duration = data.get('duration', 0)
 
         if lat is None or lon is None or distance is None:
             return jsonify({"error": "Latitude, longitude, and distance are required"}), 400
 
+        try:
+            lat = float(lat)
+            lon = float(lon)
+            distance = float(distance)
+            duration = int(duration)
+        except ValueError:
+            return jsonify({'error': 'Invalid data types'}), 400
+
+        if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+            return jsonify({'error': 'Invalid latitude or longitude'}), 400
+
+        if not (0.5 <= distance <= 10):
+            return jsonify({'error': 'Distance must be between 0.5 and 10 km'}), 400
+
+        if duration < 0:
+            return jsonify({'error': 'Duration must be non-negative'}), 400
+        
         route = create_route_coordinates(lat, lon, distance)
         if route is None:
             return jsonify({"error": "Failed to generate route. Please try again later."}), 500
@@ -322,7 +340,7 @@ def save_walk():
     lat = data.get('lat')
     lon = data.get('lon')
     distance = data.get('distance')
-    duration = data.get('duration')  # in seconds
+    duration = data.get('duration')  
 
     if not all([lat, lon, distance, duration]):
         return jsonify({"error": "Missing walk data"}), 400
@@ -335,6 +353,30 @@ def save_walk():
         dog_parks_visited = json.dumps(dog_parks_visited)
 
     difficulty = data.get('difficulty', 'medium')
+    
+    try:
+        lat = float(lat)
+        lon = float(lon)
+        distance = float(distance)
+        duration = int(duration)
+        if temperature is not None:
+            temperature = float(temperature)
+        if not isinstance(condition, (str, type(None))):
+            raise ValueError()
+        if not isinstance(dog_parks_visited, list):
+            raise ValueError()
+        if difficulty not in ['easy', 'medium', 'hard']:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid data types or values'}), 400
+
+    # Range checks
+    if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+        return jsonify({'error': 'Latitude or longitude out of range'}), 400
+    if not (0.5 <= distance <= 50):  # Assuming max 50 km walks
+        return jsonify({'error': 'Distance out of acceptable range'}), 400
+    if duration < 0:
+        return jsonify({'error': 'Duration must be non-negative'}), 400
     
     walk = Walk(
         lat=lat,
