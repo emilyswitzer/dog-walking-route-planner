@@ -203,44 +203,12 @@ def test_generate_route_with_duration(mock_post, mock_get, client):
         'lat': 37.7749,
         'lon': -122.4194,
         'distance': 3,
-        'duration': 45.5  # 45.5 minutes duration
+        'duration': 45.5  # duration in minutes input
     })
 
     assert response.status_code == 200
     data = response.get_json()
     assert "duration" in data
-    assert data["duration"] == 45.5
+    assert data["duration"] == int(45.5 * 60)  # expected in seconds
     
-@patch('app.requests.post')
-@patch('app.requests.get')
-def test_generate_route_includes_duration(mock_get, mock_post, client):
-    mock_post.return_value = MagicMock(status_code=200)
-    mock_post.return_value.json.return_value = {
-        "features": [{
-            "geometry": {
-                "coordinates": [[-122.4194, 37.7749], [-122.418, 37.775]]
-            }
-        }]
-    }
-    mock_get.return_value = MagicMock(status_code=200)
-    mock_get.return_value.json.return_value = {
-        "main": {"temp": 20},
-        "weather": [{"main": "Clear", "description": "clear sky"}]
-    }
-
-    response = client.post('/generate-route', json={
-        'lat': 37.7749,
-        'lon': -122.4194,
-        'distance': 3,
-        'duration': 1800
-    })
-
-    assert response.status_code == 200
-    data = response.get_json()
-    assert 'route' in data
-    assert 'weather' in data
-
-    with app.app_context():
-        walk = Walk.query.order_by(Walk.id.desc()).first()
-        assert walk.duration == 1800
 

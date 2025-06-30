@@ -57,7 +57,7 @@ def get_dog_friendly_spots(lat, lon, radius=1500):
 
     return spots
 
-def generate_circular_route(lat, lon, distance_km):
+def create_route_coordinates(lat, lon, distance_km):
     target_distance = distance_km * 1000  
     url = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson"
 
@@ -100,7 +100,7 @@ def generate_route():
         if lat is None or lon is None or distance is None:
             return jsonify({"error": "Missing parameters"}), 400
 
-        route = generate_circular_route(lat, lon, distance)
+        route = create_route_coordinates(lat, lon, distance)
         if route is None:
             return jsonify({"error": "Failed to generate route"}), 500
 
@@ -125,21 +125,13 @@ def generate_route():
 
         difficulty = 'easy' if distance <= 2 else 'medium' if distance <= 4 else 'hard'
 
-        duration = data.get('duration')  # in minutes
-
-        walk = Walk(
-            lat=lat,
-            lon=lon,
-            distance=distance,
-            duration=duration,
-            temperature=temperature,
-            condition=condition,
-            dog_parks_visited=json.dumps(dog_parks),
-            difficulty=difficulty
-        )
-
-        db.session.add(walk)
-        db.session.commit()
+        duration = data.get('duration')  # input from user (likely minutes)
+        duration_seconds = None
+        if duration is not None:
+            try:
+                duration_seconds = int(float(duration) * 60)  # convert minutes to seconds
+            except Exception:
+                duration_seconds = None
 
         return jsonify({
             "route": route,
@@ -150,13 +142,14 @@ def generate_route():
             },
             "dog_parks": dog_parks,
             "difficulty": difficulty,
-            "duration": duration
+            "duration": duration_seconds
         })
 
     except Exception as e:
         print("Exception in /generate-route:")
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
+
 
 
 @app.route('/dog-spots', methods=['POST'])
@@ -323,6 +316,43 @@ def walks_page():
     walks = walks_pagination.items
 
     return render_template('walks.html', walks=walks, pagination=walks_pagination)
+
+@app.route('/save-walk', methods=['POST'])
+def save_walk():
+    data = request.json
+    lat = data.get('lat')
+    lon = data.get('lon')
+    distance = data.get('distance')
+    duration = data.get('duration')  # in seconds
+
+    if not all([lat, lon, distance, duration]):
+        return jsonify({"error": "Missing walk data"}), 400
+
+    temperature = data.get('temperature')
+    condition = data.get('condition')
+    dog_parks_visited = data.get('dog_parks_visited', '[]')
+
+    if isinstance(dog_parks_visited, list):
+        dog_parks_visited = json.dumps(dog_parks_visited)
+
+    difficulty = data.get('difficulty', 'medium')
+    
+    walk = Walk(
+        lat=lat,
+        lon=lon,
+        distance=distance,
+        duration=duration,
+        timestamp=datetime.utcnow(),
+        temperature=temperature,
+        condition=condition,
+        dog_parks_visited=dog_parks_visited,
+        difficulty=difficulty
+    )
+    db.session.add(walk)
+    db.session.commit()
+
+    return jsonify({"message": "Walk saved successfully"}), 201
+
 
 if __name__ == '__main__':
     app.run(debug=True)

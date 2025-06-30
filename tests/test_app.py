@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import patch, Mock
-from app import app, generate_circular_route
+from app import app, create_route_coordinates
 import json
 
 
@@ -11,7 +11,7 @@ class DogWalkingAppTests(unittest.TestCase):
         self.app.testing = True
 
     @patch("app.requests.post")
-    def test_generate_circular_route_function(self, mock_post):
+    def test_create_route_coordinates_function(self, mock_post):
         # Setup mock response data structure similar to ORS response
         mock_response = Mock()
         mock_response.status_code = 200
@@ -33,7 +33,7 @@ class DogWalkingAppTests(unittest.TestCase):
         lat = 37.7749
         lon = -122.4194
         distance = 3  # km
-        route = generate_circular_route(lat, lon, distance)
+        route = create_route_coordinates(lat, lon, distance)
         self.assertIsNotNone(route)
         self.assertIsInstance(route, list)
         self.assertGreater(len(route), 0)
