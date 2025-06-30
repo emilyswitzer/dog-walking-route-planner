@@ -98,12 +98,12 @@ def generate_route():
         distance = data.get('distance')
 
         if lat is None or lon is None or distance is None:
-            return jsonify({"error": "Missing parameters"}), 400
+            return jsonify({"error": "Latitude, longitude, and distance are required"}), 400
 
         route = create_route_coordinates(lat, lon, distance)
         if route is None:
-            return jsonify({"error": "Failed to generate route"}), 500
-
+            return jsonify({"error": "Failed to generate route. Please try again later."}), 500
+        
         api_key = os.getenv("OPENWEATHER_API_KEY")
         weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
         try:
@@ -146,9 +146,8 @@ def generate_route():
         })
 
     except Exception as e:
-        print("Exception in /generate-route:")
-        traceback.print_exc()
-        return jsonify({"error": "Internal server error"}), 500
+        print(f"Error in /generate-route: {e}")
+        return jsonify({"error": "Internal server error. Please try again later."}), 500
 
 
 

@@ -200,3 +200,45 @@ stopWalkBtn.onclick = async () => {
     alert('Error saving walk: ' + e.message);
   }
 };
+
+async function generateRoute() {
+  try {
+    const response = await fetch('/generate-route', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        lat: currentLat,
+        lon: currentLon,
+        distance: selectedDistance,
+        duration: walkDuration
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      showError(errorData.error || "Failed to generate route");
+      return;
+    }
+
+    const data = await response.json();
+    // Proceed with rendering route, weather, etc.
+    clearError();
+  } catch (error) {
+    showError("Network error or server unavailable");
+  }
+}
+
+function showError(message) {
+  const errorDiv = document.getElementById('error-message');
+  if (errorDiv) {
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+  } else {
+    alert(message); // fallback
+  }
+}
+
+function clearError() {
+  const errorDiv = document.getElementById('error-message');
+  if (errorDiv) errorDiv.style.display = 'none';
+}
