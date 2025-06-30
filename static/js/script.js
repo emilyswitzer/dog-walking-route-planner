@@ -50,6 +50,7 @@ async function fetchWeather(lat, lon) {
     `;
   } catch (err) {
     console.error(err);
+    showError('An error occurred while generating data.');
     weatherDiv.textContent = 'Could not fetch weather data.';
   }
 }
@@ -58,11 +59,15 @@ let timer = null;
 let secondsElapsed = 0;
 let currentWalkData = null; // holds generated route and other info
 
+function formatDuration(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 function updateTimer() {
   secondsElapsed++;
-  const mins = Math.floor(secondsElapsed / 60);
-  const secs = secondsElapsed % 60;
-  timerDisplay.textContent = `Duration: ${mins}:${secs.toString().padStart(2, '0')}`;
+  timerDisplay.textContent = `Duration: ${formatDuration(secondsElapsed)}`;
 }
 
 async function saveWalk(data) {
@@ -95,6 +100,8 @@ async function saveWalk(data) {
     alert('Walk saved successfully!');
   } catch (error) {
     console.error('Error saving walk:', error);
+
+    showError('An error occurred while saving data.');
     alert('Error saving walk. Check console for details.');
   }
 }
@@ -104,6 +111,8 @@ generateBtn.onclick = () => {
     alert('Geolocation not supported');
     return;
   }
+
+  generateBtn.disabled = true;
 
   navigator.geolocation.getCurrentPosition(async position => {
     const lat = position.coords.latitude;
@@ -158,13 +167,16 @@ generateBtn.onclick = () => {
       stopWalkBtn.disabled = true;
       secondsElapsed = 0;
       timerDisplay.textContent = 'Duration: 0:00';
+      generateBtn.disabled = false;
 
     } catch (err) {
       console.error('Error during generation:', err);
+      showError('An error occurred while generating data.');
       weatherDiv.textContent = 'An error occurred while generating data.';
     }
   }, () => {
     alert('Could not get your location');
+    generateBtn.disabled = false;
   });
 };
 
@@ -173,10 +185,9 @@ startWalkBtn.onclick = () => {
     alert('Please generate a route first!');
     return;
   }
+  if (timer) return; // prevent multiple timers running
   startWalkBtn.disabled = true;
   stopWalkBtn.disabled = false;
-  secondsElapsed = 0;
-  timerDisplay.textContent = 'Duration: 0:00';
   timer = setInterval(updateTimer, 1000);
 };
 
@@ -188,15 +199,16 @@ stopWalkBtn.onclick = async () => {
   startWalkBtn.disabled = true;
   stopWalkBtn.disabled = true;
 
-  // Save walk to backend with duration in seconds
   try {
     await saveWalk({
       ...currentWalkData,
       duration: secondsElapsed
     });
     currentWalkData = null;
-    timerDisplay.textContent = 'Duration: 0:00';
+    secondsElapsed = 0;            // reset elapsed time here
+    timerDisplay.textContent = 'Duration: 0:00'; // reset display
   } catch (e) {
+    showError('An error occurred while saving data.');
     alert('Error saving walk: ' + e.message);
   }
 };
@@ -224,6 +236,7 @@ async function generateRoute() {
     // Proceed with rendering route, weather, etc.
     clearError();
   } catch (error) {
+    showError('An error occurred while connecting to the server');
     showError("Network error or server unavailable");
   }
 }
