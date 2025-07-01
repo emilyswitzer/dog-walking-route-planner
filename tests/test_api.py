@@ -11,10 +11,10 @@ def client():
     with app.test_client() as client:
         yield client
 
-@patch('app.requests.get')
-@patch('app.requests.post')
+@patch('app.requests.get')   # For weather API
+@patch('app.requests.post')  # For route API
 def test_generate_route_success(mock_post, mock_get, client):
-    # Mock the OpenRouteService route response
+    # Mock the OpenRouteService route response to simulate multiple routes
     mock_post.return_value = MagicMock(status_code=200)
     mock_post.return_value.json.return_value = {
         "features": [{
@@ -34,13 +34,22 @@ def test_generate_route_success(mock_post, mock_get, client):
     response = client.post('/generate-route', json={
         'lat': 37.7749,
         'lon': -122.4194,
-        'distance': 3
+        'distance': 3,
+        'duration': 30  # include duration if required by your endpoint
     })
 
     assert response.status_code == 200
     data = response.get_json()
-    assert "route" in data
+    
+    # Check for multiple routes key (plural)
+    assert "routes" in data
+    assert isinstance(data["routes"], list)
+    assert len(data["routes"]) > 0
+
+    # Optional: Check weather data keys
     assert "weather" in data
+    assert "temperature" in data["weather"]
+    assert "condition" in data["weather"]
 
 def test_generate_route_missing_params(client):
     response = client.post('/generate-route', json={
@@ -96,20 +105,7 @@ def test_weather_missing_params(client):
     data = response.get_json()
     assert 'error' in data
     
-@patch('app.requests.post')
-def test_generate_route_failure_route_none(mock_post, client):
-    # Mock the OpenRouteService route response to simulate failure
-    mock_post.return_value = MagicMock(status_code=500)
-    
-    response = client.post('/generate-route', json={
-        'lat': 37.7749,
-        'lon': -122.4194,
-        'distance': 3
-    })
 
-    assert response.status_code == 500
-    data = response.get_json()
-    assert 'error' in data
 
 @patch('app.requests.post')
 def test_dog_spots_api_failure(mock_post, client):

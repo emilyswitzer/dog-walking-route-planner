@@ -16,13 +16,15 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19
 }).addTo(map);
 
-let routeLayer = null;
+let routeLayers = [];  // ⬅ Store multiple routes
 let spotsLayer = null;
+let selectedRouteIndex = null;
 
 function clearLayers() {
-  if (routeLayer) {
-    map.removeLayer(routeLayer);
-    routeLayer = null;
+  // Remove all route polylines
+  if (routeLayers.length) {
+    routeLayers.forEach(layer => map.removeLayer(layer));
+    routeLayers = [];
   }
   if (spotsLayer) {
     map.removeLayer(spotsLayer);
@@ -70,6 +72,44 @@ function updateTimer() {
   timerDisplay.textContent = `Duration: ${formatDuration(secondsElapsed)}`;
 }
 
+document.getElementById('saveWalkBtn').onclick = async () => {
+  if (selectedRouteIndex === null || !routeLayers[selectedRouteIndex]) {
+    showError('Please select a route first.');
+    return;
+  }
+
+  const selectedCoords = routeLayers[selectedRouteIndex]
+    .getLatLngs()
+    .map(latlng => [latlng.lat, latlng.lng]);
+
+  const distance = parseFloat(distSlider.value);
+  const duration = parseFloat(durationInput.value || 0); // if you have this field
+
+  try {
+    const res = await fetch('/save-walk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        route: selectedCoords,
+        distance,
+        duration
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.error || 'Failed to save walk.');
+      return;
+    }
+
+    alert('Walk saved successfully!');
+  } catch (err) {
+    console.error(err);
+    showError('Failed to save walk.');
+  }
+};
+
+
 async function saveWalk(data) {
   // Duration already in seconds here
   const payload = {
@@ -113,7 +153,6 @@ generateBtn.onclick = () => {
     return;
   }
 
-  // Validate distance slider value
   const distance = parseFloat(distSlider.value);
   if (isNaN(distance) || distance < 0.5 || distance > 10) {
     showError('Please select a distance between 0.5 and 10 km.');
@@ -125,69 +164,49 @@ generateBtn.onclick = () => {
   navigator.geolocation.getCurrentPosition(async position => {
     const lat = position.coords.latitude;
     const lon = position.coords.longitude;
-    const duration = 0; 
 
-    clearLayers();
+    clearRoutes();
+    clearMapData(); // remove spots, weather, etc if needed
 
     try {
-      // Generate Route, now including duration in minutes
-      const routeResp = await fetch('/generate-route', {
+      const res = await fetch('/generate-route', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ lat, lon, distance, duration })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lon, distance })
       });
 
-      if (!routeResp.ok) {
-        const errorData = await routeResp.json();
-        showError(errorData.error || 'Failed to generate route.');
-        generateBtn.disabled = false;
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || 'Failed to generate routes');
         return;
       }
 
-      const routeData = await routeResp.json();
+      const colors = ['blue', 'green', 'orange'];
+      data.routes.forEach((routeCoords, i) => {
+        const latlngs = routeCoords.map(([lat, lon]) => [lat, lon]);
+        const color = colors[i % colors.length];
 
-      const latlngs = routeData.route.map(coord => [coord[0], coord[1]]);
-      routeLayer = L.polyline(latlngs, { color: 'blue' }).addTo(map);
-      map.fitBounds(routeLayer.getBounds());
+        const polyline = L.polyline(latlngs, {
+          color,
+          weight: 5,
+          opacity: 0.7
+        }).addTo(map);
 
-      // Dog Spots
-      const spotsResp = await fetch('/dog-spots', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ lat, lon })
+        polyline.options.originalColor = color;
+        polyline.on('click', () => selectRoute(i));
+        routeLayers.push(polyline);
       });
-      const spotsData = await spotsResp.json();
 
-      spotsLayer = L.layerGroup();
-      spotsData.spots.forEach(spot => {
-        const marker = L.marker([spot.lat, spot.lon])
-          .bindPopup(`${spot.name} (${spot.type})`);
-        spotsLayer.addLayer(marker);
-      });
-      spotsLayer.addTo(map);
+      if (data.routes.length > 0) {
+        map.fitBounds(routeLayers[0].getBounds());
+        selectRoute(0); // select first route by default
+      }
 
-      // Weather
-      await fetchWeather(lat, lon);
-
-      // Save current walk data to use on start/stop buttons
-      currentWalkData = {
-        lat, lon, distance,
-        temperature: routeData.weather.temperature,
-        condition: routeData.weather.condition,
-        dog_parks_visited: spotsData.spots.filter(s => s.type === 'dog_park').map(s => s.name),
-        difficulty: routeData.difficulty
-      };
-
-      startWalkBtn.disabled = false;
-      stopWalkBtn.disabled = true;
-      secondsElapsed = 0;
-      timerDisplay.textContent = 'Duration: 0:00';
-      generateBtn.disabled = false;
-
+      // Store metadata if needed (e.g. currentWeather = data.weather)
     } catch (err) {
-      console.error('Error during generation:', err);
-      showError('An error occurred while generating data.');
-      weatherDiv.textContent = 'An error occurred while generating data.';
+      console.error(err);
+      showError('An error occurred while generating routes.');
+    } finally {
       generateBtn.disabled = false;
     }
   }, () => {
@@ -195,6 +214,44 @@ generateBtn.onclick = () => {
     generateBtn.disabled = false;
   });
 };
+
+function clearRoutes() {
+  routeLayers.forEach(layer => map.removeLayer(layer));
+  routeLayers = [];
+}
+
+function clearWeatherInfo() {
+  const weatherDiv = document.getElementById('weather-info');
+  if (weatherDiv) {
+    weatherDiv.innerHTML = '';
+  }
+}
+
+function clearMapData() {
+  // Remove all route layers
+  routeLayers.forEach(layer => map.removeLayer(layer));
+  routeLayers = [];
+
+  // Remove dog park markers if you keep them in a separate array (example: dogParkMarkers)
+  if (typeof dogParkMarkers !== 'undefined') {
+    dogParkMarkers.forEach(marker => map.removeLayer(marker));
+    dogParkMarkers = [];
+  }
+
+  clearWeatherInfo();
+  clearError();
+}
+
+function selectRoute(index) {
+  selectedRouteIndex = index;
+  routeLayers.forEach((layer, idx) => {
+    layer.setStyle({
+      weight: idx === index ? 8 : 4,
+      opacity: idx === index ? 1 : 0.3,
+      color: idx === index ? 'red' : layer.options.originalColor
+    });
+  });
+}
 
 startWalkBtn.onclick = () => {
   if (!currentWalkData) {
@@ -249,7 +306,6 @@ async function generateRoute() {
     }
 
     const data = await response.json();
-    // Proceed with rendering route, weather, etc.
     clearError();
   } catch (error) {
     showError('An error occurred while connecting to the server');

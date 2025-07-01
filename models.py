@@ -15,6 +15,7 @@ class Walk(db.Model):
     condition = db.Column(db.String(50))
     dog_parks_visited = db.Column(db.Text)  # Storing as JSON string
     difficulty = db.Column(db.String(20))  # easy, medium, hard
+    route = db.Column(db.Text, nullable=True)
 
     def __repr__(self):
         return f"<Walk {self.id} at ({self.lat}, {self.lon})>"

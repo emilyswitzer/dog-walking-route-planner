@@ -6,6 +6,7 @@ from config import Config
 import requests
 import traceback
 import polyline
+import math, random
 import json 
 from datetime import datetime, timedelta
 
@@ -57,33 +58,25 @@ def get_dog_friendly_spots(lat, lon, radius=1500):
 
     return spots
 
-def create_route_coordinates(lat, lon, distance_km):
-    target_distance = distance_km * 1000  
-    url = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson"
+def create_route_coordinates(lat, lon, distance_km, steps=10):
+    segment_length = distance_km / steps
+    bearing = random.uniform(0, 360)
+    coords = [(lat, lon)]
 
-    offset = distance_km * 0.009  
-    coords = [[lon, lat], [lon + offset, lat]]
+    for _ in range(steps):
+        # Slightly randomize bearing to simulate natural turns
+        bearing += random.uniform(-45, 45)
+        bearing %= 360
 
-    body = {
-        "coordinates": coords,
-        "instructions": False,
-        "units": "m"
-    }
+        # Approximate conversion: 1° lat ≈ 111 km
+        delta_lat = (segment_length / 111) * math.cos(math.radians(bearing))
+        delta_lon = (segment_length / (111 * math.cos(math.radians(lat)))) * math.sin(math.radians(bearing))
 
-    headers = {
-        "Authorization": app.config.get("ORS_API_KEY"),
-        "Content-Type": "application/json"
-    }
+        lat += delta_lat
+        lon += delta_lon
+        coords.append((lat, lon))
 
-    response = requests.post(url, json=body, headers=headers)
-    if response.status_code != 200:
-        return None
-
-    data = response.json()
-    route_coords = data["features"][0]["geometry"]["coordinates"]
-    route_latlon = [(coord[1], coord[0]) for coord in route_coords]
-
-    return route_latlon
+    return coords
 
 @app.route('/')
 def index():
@@ -105,7 +98,6 @@ def generate_route():
             lat = float(lat)
             lon = float(lon)
             distance = float(distance)
-            duration = int(duration)
         except ValueError:
             return jsonify({'error': 'Invalid data types'}), 400
 
@@ -115,20 +107,33 @@ def generate_route():
         if not (0.5 <= distance <= 10):
             return jsonify({'error': 'Distance must be between 0.5 and 10 km'}), 400
 
-        if duration < 0:
-            return jsonify({'error': 'Duration must be non-negative'}), 400
-        
-        route = create_route_coordinates(lat, lon, distance)
-        if route is None:
-            return jsonify({"error": "Failed to generate route. Please try again later."}), 500
-        
+        duration_seconds = None
+        if duration is not None:
+            try:
+                duration_seconds = int(float(duration) * 60)  # float to seconds
+                if duration_seconds < 0:
+                    return jsonify({'error': 'Duration must be non-negative'}), 400
+            except Exception:
+                return jsonify({'error': 'Invalid duration value'}), 400
+
+      
+        routes = []
+        for i in range(3):
+            variation_factor = 0.9 + 0.1 * i  # 90%, 100%, 110% of base distance
+            varied_route = create_route_coordinates(lat, lon, distance * variation_factor)
+            if varied_route:
+                routes.append(varied_route)
+
+        if not routes:
+            return jsonify({"error": "Failed to generate any routes."}), 500
+
+        # Weather fetch
         api_key = os.getenv("OPENWEATHER_API_KEY")
         weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
         try:
             weather_resp = requests.get(weather_url)
             weather_resp.raise_for_status()
             weather_json = weather_resp.json()
-
             temperature = weather_json['main']['temp']
             condition = weather_json['weather'][0]['main']
             description = weather_json['weather'][0]['description']
@@ -138,21 +143,24 @@ def generate_route():
             condition = None
             description = None
 
+        # Dog spots
         spots = get_dog_friendly_spots(lat, lon)
         dog_parks = [s['name'] for s in spots if s['type'] == 'dog_park']
 
+        # Difficulty
         difficulty = 'easy' if distance <= 2 else 'medium' if distance <= 4 else 'hard'
 
-        duration = data.get('duration')  # input from user (likely minutes)
+        # Duration in seconds
         duration_seconds = None
-        if duration is not None:
-            try:
-                duration_seconds = int(float(duration) * 60)  # convert minutes to seconds
-            except Exception:
-                duration_seconds = None
+        try:
+            duration_seconds = int(float(duration) * 60)
+        except:
+            pass
+
+        print("Returning routes:", routes)
 
         return jsonify({
-            "route": route,
+            "routes": routes,
             "weather": {
                 "temperature": temperature,
                 "condition": condition,
@@ -166,7 +174,6 @@ def generate_route():
     except Exception as e:
         print(f"Error in /generate-route: {e}")
         return jsonify({"error": "Internal server error. Please try again later."}), 500
-
 
 
 @app.route('/dog-spots', methods=['POST'])
@@ -340,44 +347,59 @@ def save_walk():
     lat = data.get('lat')
     lon = data.get('lon')
     distance = data.get('distance')
-    duration = data.get('duration')  
+    duration = data.get('duration')
 
-    if not all([lat, lon, distance, duration]):
+    # Required fields check
+    if lat is None or lon is None or distance is None or duration is None:
         return jsonify({"error": "Missing walk data"}), 400
 
+    # Optional fields
     temperature = data.get('temperature')
     condition = data.get('condition')
-    dog_parks_visited = data.get('dog_parks_visited', '[]')
-
-    if isinstance(dog_parks_visited, list):
-        dog_parks_visited = json.dumps(dog_parks_visited)
-
+    dog_parks_visited = data.get('dog_parks_visited', [])
     difficulty = data.get('difficulty', 'medium')
-    
+    route = data.get('route')  # New: Persist full route coordinates
+
     try:
         lat = float(lat)
         lon = float(lon)
         distance = float(distance)
         duration = int(duration)
+
         if temperature is not None:
             temperature = float(temperature)
+
         if not isinstance(condition, (str, type(None))):
-            raise ValueError()
+            raise ValueError("Condition must be a string")
+
         if not isinstance(dog_parks_visited, list):
-            raise ValueError()
+            raise ValueError("dog_parks_visited must be a list")
+
         if difficulty not in ['easy', 'medium', 'hard']:
-            raise ValueError()
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid data types or values'}), 400
+            raise ValueError("Invalid difficulty")
+
+        if route is not None:
+            if not isinstance(route, list) or not all(
+                isinstance(coord, list) and len(coord) == 2 for coord in route
+            ):
+                raise ValueError("Invalid route format")
+
+    except (ValueError, TypeError) as e:
+        return jsonify({'error': f'Invalid data types or values: {str(e)}'}), 400
 
     # Range checks
     if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
         return jsonify({'error': 'Latitude or longitude out of range'}), 400
-    if not (0.5 <= distance <= 50):  # Assuming max 50 km walks
+    if not (0.5 <= distance <= 50):
         return jsonify({'error': 'Distance out of acceptable range'}), 400
     if duration < 0:
         return jsonify({'error': 'Duration must be non-negative'}), 400
-    
+
+    # Serialize optional fields
+    dog_parks_json = json.dumps(dog_parks_visited)
+    route_json = json.dumps(route) if route else None
+
+    # Create and save walk record
     walk = Walk(
         lat=lat,
         lon=lon,
@@ -386,13 +408,19 @@ def save_walk():
         timestamp=datetime.utcnow(),
         temperature=temperature,
         condition=condition,
-        dog_parks_visited=dog_parks_visited,
-        difficulty=difficulty
+        dog_parks_visited=dog_parks_json,
+        difficulty=difficulty,
+        route=route_json  # Ensure your model has this column
     )
-    db.session.add(walk)
-    db.session.commit()
 
-    return jsonify({"message": "Walk saved successfully"}), 201
+    try:
+        db.session.add(walk)
+        db.session.commit()
+        return jsonify({"message": "Walk saved successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        print("Database error:", e)
+        return jsonify({"error": "Failed to save walk to database"}), 500
 
 
 if __name__ == '__main__':

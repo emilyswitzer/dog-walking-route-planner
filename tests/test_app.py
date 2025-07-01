@@ -45,18 +45,18 @@ class DogWalkingAppTests(unittest.TestCase):
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "features": [
-                {
-                    "geometry": {
-                        "coordinates": [
-                            [-122.4194, 37.7749],
-                            [-122.41, 37.78],
-                            [-122.40, 37.79],
-                        ]
-                    }
+        "features": [
+            {
+                "geometry": {
+                    "coordinates": [
+                        [-122.4194, 37.7749],
+                        [-122.41, 37.78],
+                        [-122.40, 37.79],
+                    ]
                 }
-            ]
-        }
+            }
+        ]
+    }
         mock_post.return_value = mock_response
 
         data = {"lat": 37.7749, "lon": -122.4194, "distance": 3}
@@ -65,8 +65,17 @@ class DogWalkingAppTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.data)
-        self.assertIn("route", response_data)
-        self.assertIsInstance(response_data["route"], list)
+
+        # Check 'routes' key (plural)
+        self.assertIn("routes", response_data)
+        self.assertIsInstance(response_data["routes"], list)
+
+        # Optionally check first route is a list of coordinates
+        if response_data["routes"]:
+            self.assertIsInstance(response_data["routes"][0], list)
+            self.assertIsInstance(response_data["routes"][0][0], list)  # coordinate pair
+
+
 
     def test_generate_route_endpoint_missing_params(self):
         response = self.app.post(
