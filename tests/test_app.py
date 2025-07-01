@@ -144,6 +144,27 @@ class DogWalkingAppTests(unittest.TestCase):
         self.assertIn('condition', data)
         self.assertIn('recommendation', data)
         self.assertEqual(data['recommendation'], 'Good')
+        
+    def test_save_walk_db_failure(self):
+        payload = {
+            "lat": 37.7749,
+            "lon": -122.4194,
+            "distance": 3.5,
+            "duration": 1800
+        }
+
+        with patch("app.db.session.commit", side_effect=Exception("DB commit failed")):
+            response = self.app.post(
+                "save-walk",
+                data=json.dumps(payload),
+                content_type="application/json"
+            )
+
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn("error", data)
+        self.assertEqual(data["error"], "Invalid or incomplete data")
+
 
 
 if __name__ == "__main__":

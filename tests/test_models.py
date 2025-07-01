@@ -101,3 +101,4 @@ def test_walk_model_duration(test_app):
         saved_walk = Walk.query.first()
         assert saved_walk.duration == 3600
         assert saved_walk.distance == 3.5
+        
