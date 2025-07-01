@@ -7,6 +7,9 @@ const startWalkBtn = document.getElementById('startWalkBtn');
 const stopWalkBtn = document.getElementById('stopWalkBtn');
 const timerDisplay = document.getElementById('timerDisplay');
 
+let walkStartTime = null;
+let walkDuration = 0;
+
 distSlider.oninput = () => {
   distValue.textContent = distSlider.value;
 };
@@ -71,44 +74,6 @@ function updateTimer() {
   secondsElapsed++;
   timerDisplay.textContent = `Duration: ${formatDuration(secondsElapsed)}`;
 }
-
-document.getElementById('saveWalkBtn').onclick = async () => {
-  if (selectedRouteIndex === null || !routeLayers[selectedRouteIndex]) {
-    showError('Please select a route first.');
-    return;
-  }
-
-  const selectedCoords = routeLayers[selectedRouteIndex]
-    .getLatLngs()
-    .map(latlng => [latlng.lat, latlng.lng]);
-
-  const distance = parseFloat(distSlider.value);
-  const duration = parseFloat(durationInput.value || 0); // if you have this field
-
-  try {
-    const res = await fetch('/save-walk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        route: selectedCoords,
-        distance,
-        duration
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      showError(data.error || 'Failed to save walk.');
-      return;
-    }
-
-    alert('Walk saved successfully!');
-  } catch (err) {
-    console.error(err);
-    showError('Failed to save walk.');
-  }
-};
-
 
 async function saveWalk(data) {
   // Duration already in seconds here
@@ -197,9 +162,19 @@ generateBtn.onclick = () => {
         routeLayers.push(polyline);
       });
 
+
       if (data.routes.length > 0) {
         map.fitBounds(routeLayers[0].getBounds());
         selectRoute(0); // select first route by default
+        currentWalkData = {
+          lat: lat,
+          lon: lon,
+          distance: distance,
+          temperature: data.weather?.temperature ?? null,
+          condition: data.weather?.condition ?? null,
+          dog_parks_visited: data.dog_parks_visited ?? [],
+          difficulty: 'medium' // or from data if available
+        };
       }
 
       // Store metadata if needed (e.g. currentWeather = data.weather)
@@ -228,11 +203,10 @@ function clearWeatherInfo() {
 }
 
 function clearMapData() {
-  // Remove all route layers
+
   routeLayers.forEach(layer => map.removeLayer(layer));
   routeLayers = [];
 
-  // Remove dog park markers if you keep them in a separate array (example: dogParkMarkers)
   if (typeof dogParkMarkers !== 'undefined') {
     dogParkMarkers.forEach(marker => map.removeLayer(marker));
     dogParkMarkers = [];
@@ -253,21 +227,29 @@ function selectRoute(index) {
   });
 }
 
+startWalkBtn.disabled = false;
+stopWalkBtn.disabled = true;
+
 startWalkBtn.onclick = () => {
   if (!currentWalkData) {
     alert('Please generate a route first!');
     return;
   }
   if (timer) return; // prevent multiple timers running
+  walkStartTime = new Date();
+  secondsElapsed = 0;
+  timerDisplay.textContent = `Duration: ${formatDuration(secondsElapsed)}`;
   startWalkBtn.disabled = true;
   stopWalkBtn.disabled = false;
   timer = setInterval(updateTimer, 1000);
 };
 
 stopWalkBtn.onclick = async () => {
-  if (!timer) return;
+  if (!timer || !walkStartTime) return;
   clearInterval(timer);
   timer = null;
+  
+  walkDuration = secondsElapsed; 
 
   startWalkBtn.disabled = true;
   stopWalkBtn.disabled = true;
@@ -275,7 +257,7 @@ stopWalkBtn.onclick = async () => {
   try {
     await saveWalk({
       ...currentWalkData,
-      duration: secondsElapsed
+      duration: walkDuration
     });
     currentWalkData = null;
     secondsElapsed = 0;            // reset elapsed time here

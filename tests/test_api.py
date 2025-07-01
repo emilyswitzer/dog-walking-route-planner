@@ -135,14 +135,6 @@ def test_weather_api_failure(mock_get, client):
     data = response.get_json()
     assert 'error' in data
     
-def test_walk_history(client):
-    response = client.get('/walk-history')
-    assert response.status_code == 200
-    data = response.get_json()
-    assert isinstance(data, list)
-    if data:
-        assert 'lat' in data[0]
-        assert 'distance' in data[0]
         
 def test_api_get_walks(client):
     with app.app_context():

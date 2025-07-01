@@ -34,15 +34,24 @@
                 <th>Condition</th>
                 <th>Dog Parks Visited</th>
                 <th>Difficulty</th>
-                <th>Duration</th>
+                <th>Duration (min)</th>
             </tr>
         </thead>
         <tbody>
-            <!-- Rows will go here -->
+            <!-- Data rows go here -->
         </tbody>
     </table>
 
+    <div id="pagination-controls" style="margin-top: 20px;">
+        <button id="prev-btn" disabled>Previous</button>
+        <span id="page-num">Page 1</span>
+        <button id="next-btn" disabled>Next</button>
+    </div>
+
     <script>
+        let currentPage = 1;
+        let totalPages = 1;
+
         async function fetchWalks(params = {}) {
             const query = new URLSearchParams(params);
             const response = await fetch('/api/walks?' + query.toString());
@@ -53,47 +62,67 @@
         function renderWalksTable(walks) {
             const tbody = document.querySelector('#walks-table tbody');
             tbody.innerHTML = '';
+            if (!walks || walks.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td colspan="10">No walks found.</td>`;
+                tbody.appendChild(row);
+                return;
+            }
             walks.forEach(walk => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${walk.id}</td>
-                    <td>${walk.lat}</td>
-                    <td>${walk.lon}</td>
-                    <td>${walk.distance}</td>
+                    <td>${walk.lat.toFixed(5)}</td>
+                    <td>${walk.lon.toFixed(5)}</td>
+                    <td>${walk.distance.toFixed(2)} km</td>
                     <td>${new Date(walk.timestamp).toLocaleString()}</td>
                     <td>${walk.temperature ?? 'N/A'}</td>
                     <td>${walk.condition ?? 'N/A'}</td>
-                    <td>${walk.dog_parks_visited}</td>
+                    <td>${JSON.parse(walk.dog_parks_visited || '[]').join(', ') || 'None'}</td>
                     <td>${walk.difficulty}</td>
-                    <td>${walk.duration}</td>
+                    <td>${walk.duration ? Math.round(walk.duration / 60) : 'N/A'}</td>
                 `;
                 tbody.appendChild(row);
             });
         }
 
+        function updatePaginationControls(page, total) {
+            document.getElementById('page-num').textContent = `Page ${page}`;
+            document.getElementById('prev-btn').disabled = page <= 1;
+            document.getElementById('next-btn').disabled = page >= total;
+        }
+
+        async function loadWalks(page = 1, filters = {}) {
+            const params = { page, per_page: 10, ...filters };
+            const data = await fetchWalks(params);
+            currentPage = data.page;
+            totalPages = data.pages;
+            renderWalksTable(data.walks);
+            updatePaginationControls(currentPage, totalPages);
+        }
+
         document.getElementById('filter-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-
-            const params = {
+            const filters = {
                 start_date: e.target.start_date.value,
                 end_date: e.target.end_date.value,
                 min_distance: e.target.min_distance.value,
-                max_distance: e.target.max_distance.value,
-                page: 1,
-                per_page: 10
+                max_distance: e.target.max_distance.value
             };
-
-            // Remove empty params so API isn't confused
-            Object.keys(params).forEach(key => {
-                if (!params[key]) delete params[key];
-            });
-
-            const data = await fetchWalks(params);
-            renderWalksTable(data.walks);
+            Object.keys(filters).forEach(k => !filters[k] && delete filters[k]);
+            await loadWalks(1, filters);
         });
 
-        // Load initial data without filters
-        fetchWalks({page:1, per_page:10}).then(data => renderWalksTable(data.walks));
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            if (currentPage > 1) loadWalks(currentPage - 1);
+        });
+
+        document.getElementById('next-btn').addEventListener('click', () => {
+            if (currentPage < totalPages) loadWalks(currentPage + 1);
+        });
+
+        // Initial load
+        loadWalks();
     </script>
 </body>
 </html>
